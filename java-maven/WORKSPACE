@@ -1,7 +1,11 @@
+# load("@bazel_tools//tools/build_defs/repo:maven_rules.bzl", "maven_jar")
+load(":maven_rules.bzl", "maven_jar")
+
 maven_jar(
     name = "com_google_guava_guava",
     artifact = "com.google.guava:guava:18.0",
-    server = "maven_uk_server",
+    # repository = "http://repo.exist.com/maven2",
+    # transitive = False,
 )
 
 maven_server(
