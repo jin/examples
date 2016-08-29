@@ -180,7 +180,6 @@ _maven_jar_attrs = {
     "repository": attr.string(default=MAVEN_CENTRAL_HOST),
     "server": attr.string(default=""),
     "sha1": attr.string(default=""),
-    "transitive": attr.bool(default=True),
 }
 
 maven_jar = repository_rule(
