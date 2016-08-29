@@ -17,7 +17,6 @@ MAVEN_CENTRAL_HOST = "repo1.maven.org"
 MAVEN_CENTRAL_PATH = "/maven2"
 MAVEN_CENTRAL_URL = HTTP_PROTOCOL + MAVEN_CENTRAL_HOST + MAVEN_CENTRAL_PATH
 
-# TODO(jingwen): remove dependency from maven binary
 MAVEN_DEP_PLUGIN="org.apache.maven.plugins:maven-dependency-plugin:2.8:get"
 
 # Returns a string containing the contents of the BUILD file
@@ -48,7 +47,6 @@ def _create_artifact_struct(fully_qualified_name):
   parts = fully_qualified_name.split(":")
   if len(parts) != 3:
     fail("artifact must be defined as a fully qualified name. e.g. groupId:artifactId:version")
-
   group_id, artifact_id, version = parts
   return struct(
       fully_qualified_name = fully_qualified_name,
@@ -89,23 +87,23 @@ def _create_path_struct(ctx, artifact):
       symlink_jar_path = ctx.path("%s/%s" % (symlink_folder, jar_filename)),
   )
 
-def _download_artifact(ctx, fully_qualified_name, dest):
+def _download_artifact(ctx, fully_qualified_name, destination):
   transitive = str(ctx.attr.transitive).lower()
   command = [
     "bash", "-c", """
       set -ex
       mvn {flags} {dep_get_plugin} \
       "-DrepoUrl={repository}" \
-      "-Dartifact={artifact}" \
+      "-Dartifact={fully_qualified_name}" \
       "-Dtransitive={transitive}" \
       "-Ddest={dest}" \
     """.format(
       flags = "-e -X",
       dep_get_plugin = MAVEN_DEP_PLUGIN,
       repository = ctx.attr.repository,
-      artifact = fully_qualified_name,
+      fully_qualified_name = fully_qualified_name,
       transitive = transitive,
-      dest = dest,
+      dest = destination,
     )
   ]
   exec_result = ctx.execute(command)
@@ -121,7 +119,11 @@ def maven_jar_impl(ctx):
   artifact = _create_artifact_struct(ctx.attr.artifact)
   paths = _create_path_struct(ctx, artifact)
 
-  mkdir_status = ctx.execute(["mkdir", "-p", paths.jar_folder, paths.symlink_folder])
+  mkdir_status = ctx.execute([
+      "bash", "-c",
+      "set -ex",
+      "(mkdir -p %s %s)" % (paths.jar_folder, paths.symlink_folder)
+  ])
   if mkdir_status.return_code != 0:
     fail("Failed to create destination folder for %s" % artifact.fully_qualified_name)
 
@@ -131,14 +133,10 @@ def maven_jar_impl(ctx):
   _download_artifact(
       ctx = ctx,
       fully_qualified_name = artifact.fully_qualified_name,
-      dest = paths.absolute_jar_path
+      destination = paths.absolute_jar_path
   )
 
   ctx.symlink(paths.absolute_jar_path, paths.symlink_jar_path)
-
-# TODO(jingwen)
-# def _maven_server_impl(repo_ctx):
-#   print('TODO')
 
 _maven_jar_attrs = {
     "artifact": attr.string(default="", mandatory=True),
@@ -149,20 +147,8 @@ _maven_jar_attrs = {
     "transitive": attr.bool(default=True),
 }
 
-# TODO(jingwen): figure out maven settings concatenation
-# _maven_server_attrs = {
-#     "settings_file": attr.string(default=""),
-#     "url": attr.string(default=MAVEN_CENTRAL_URL),
-# }
-
 maven_jar = repository_rule(
     maven_jar_impl,
     attrs=_maven_jar_attrs,
     local=False,
 )
-
-# maven_server = repository_rule(
-#     _maven_server_impl,
-#     attrs=_maven_server_attrs,
-#     local=True,
-# )
