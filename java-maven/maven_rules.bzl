@@ -140,7 +140,7 @@ def _verify_checksum(ctx, paths, sha1 = ""):
              actual_sha1 = actual_sha1,
          ))
   else:
-   ctx.file(paths.absolute_sha1_path, sha1, False)
+    ctx.file(paths.absolute_sha1_path, sha1, False)
 
 # This is the main implementation of the maven_jar rule.
 # It does the following:
