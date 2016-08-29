@@ -70,28 +70,29 @@ def _create_path_struct(artifact):
   # e.g. guava-18.0.jar
   jar_filename = "%s-%s.jar" % (artifact.artifact_id, artifact.version)
   # e.g. com/google/guava/guava/18.0
-  relative_folder_name = "/".join(artifact.group_id.split(".") +
+  relative_folder = "/".join(artifact.group_id.split(".") +
                                   [artifact.artifact_id] +
                                   [artifact.version])
+
   # The symlink to the actual .jar is stored in this folder, along
   # with the BUILD file
-  symlink_folder_name = "jar"
+  symlink_folder = "jar"
   return struct(
     jar_filename = jar_filename,
     sha1_filename = "%s.sha1" % jar_filename,
     sha256_filename = "%s.sha256" % jar_filename,
-    relative_folder_name = relative_folder_name,
-    symlink_folder_name = symlink_folder_name,
+    relative_folder = relative_folder,
+    symlink_folder = symlink_folder,
     # e.g. com/google/guava/guava/18.0/guava-18.0.jar
-    relative_jar_path = "%s/%s" % (relative_folder_name, jar_filename),
-    symlink_jar_path = "%s/%s" % (symlink_folder_name, jar_filename),
+    relative_jar = "%s/%s" % (relative_folder, jar_filename),
+    symlink_jar = "%s/%s" % (symlink_folder, jar_filename),
   )
 
 def _maven_jar_impl(ctx):
   artifact = _create_artifact_struct(ctx.attr.artifact)
   paths = _create_path_struct(artifact)
 
-  mkdir_status = ctx.execute(["mkdir", "-p", paths.relative_folder_name, paths.symlink_folder_name])
+  mkdir_status = ctx.execute(["mkdir", "-p", paths.relative_folder, paths.symlink_folder])
   if mkdir_status.return_code != 0:
     fail("Failed to create destination folder for %s" % artifact.fully_qualified_name)
 
@@ -109,20 +110,20 @@ def _maven_jar_impl(ctx):
           repository = ctx.attr.repository,
           artifact = artifact.fully_qualified_name,
           transitive = str(ctx.attr.transitive).lower(),
-          dest = ctx.path(paths.relative_jar_path),
+          dest = ctx.path(paths.relative_jar),
        )
     ]
 
   # print("".join(command))
   # print(_create_build_file_contents(ctx.name, artifact))
-  # print(relative_folder_name)
-  ctx.file('%s/BUILD' % paths.symlink_folder_name, _create_build_file_contents(ctx.name, artifact), False)
+  # print(relative_folder)
+  ctx.file('%s/BUILD' % paths.symlink_folder, _create_build_file_contents(ctx.name, artifact), False)
 
   exec_result = ctx.execute(command)
   if exec_result.return_code != 0:
     fail("error downloading %s:\n%s" % (ctx.name, exec_result.stderr))
 
-  ctx.symlink(paths.relative_jar_path, paths.symlink_jar_path)
+  ctx.symlink(paths.relative_jar, paths.symlink_jar)
 
   # print(exec_result.stdout)
 
