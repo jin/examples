@@ -20,29 +20,22 @@ MAVEN_CENTRAL_URL = HTTP_PROTOCOL + MAVEN_CENTRAL_HOST + MAVEN_CENTRAL_PATH
 # TODO(jingwen): remove dependency from maven binary
 MAVEN_DEP_PLUGIN="org.apache.maven.plugins:maven-dependency-plugin:2.8:get"
 
-# MAVEN_GLOBAL_SETTINGS_PATH = "$M2_HOME/conf/settings.xml"
-# MAVEN_USER_SETTINGS_PATH = "$HOME/.m2/settings.xml"
-
 # Returns a string containing the contents of the BUILD file
-def _create_build_file_contents(rule_name, artifact):
+def _create_build_file_contents(rule_name, jar_filename):
   return """
 # DO NOT EDIT: automatically generated BUILD file for maven_jar rule {rule_name}
 
 java_import(
     name = 'jar',
-    jars = ['{artifact_id}-{version}.jar'],
+    jars = ['{jar_filename}'],
     visibility = ['//visibility:public']
 )
 
 filegroup(
     name = 'file',
-    srcs = ['{artifact_id}-{version}.jar'],
+    srcs = ['jar_filename'],
     visibility = ['//visibility:public']
-)\n""".format(
-      rule_name = rule_name,
-      artifact_id = artifact.artifact_id,
-      version = artifact.version,
-    )
+)\n""".format(rule_name = rule_name, jar_filename = jar_filename)
 
 def _validate_ctx_attr(ctx):
   if (ctx.attr.repository != "" and ctx.attr.server != ""):
@@ -110,26 +103,24 @@ def _maven_jar_impl(ctx):
 
   command = [
     "bash", "-c", """
-    set -ex
-    mvn {flags} {dep_get_plugin} \
-    "-DrepoUrl={repository}" \
-    "-Dartifact={artifact}" \
-    "-Dtransitive={transitive}" \
-    "-Ddest={dest}" \
+      set -ex
+      mvn {flags} {dep_get_plugin} \
+      "-DrepoUrl={repository}" \
+      "-Dartifact={artifact}" \
+      "-Dtransitive={transitive}" \
+      "-Ddest={dest}" \
     """.format(
-          flags = "-e -X",
-          dep_get_plugin = MAVEN_DEP_PLUGIN,
-          repository = ctx.attr.repository,
-          artifact = artifact.fully_qualified_name,
-          transitive = str(ctx.attr.transitive).lower(),
-          dest = ctx.path(paths.relative_jar),
-       )
-    ]
+    flags = "-e -X",
+    dep_get_plugin = MAVEN_DEP_PLUGIN,
+    repository = ctx.attr.repository,
+    artifact = artifact.fully_qualified_name,
+    transitive = str(ctx.attr.transitive).lower(),
+    dest = ctx.path(paths.relative_jar),
+    )
+  ]
 
-  # print("".join(command))
-  # print(_create_build_file_contents(ctx.name, artifact))
-  # print(relative_folder)
-  ctx.file('%s/BUILD' % paths.symlink_folder, _create_build_file_contents(ctx.name, artifact), False)
+  build_file_contents = _create_build_file_contents(ctx.name, paths.jar_filename)
+  ctx.file('%s/BUILD' % paths.symlink_folder, build_file_contents, False)
 
   exec_result = ctx.execute(command)
   if exec_result.return_code != 0:
@@ -144,12 +135,12 @@ def _maven_jar_impl(ctx):
 #   print('TODO')
 
 _maven_jar_attrs = {
-    "artifact": attr.string(default="", mandatory=True),
-    "repository": attr.string(default=MAVEN_CENTRAL_HOST),
-    "server": attr.string(default=""),
-    "sha1": attr.string(default=""),
-    "sha256": attr.string(default=""),
-    "transitive": attr.bool(default=True),
+  "artifact": attr.string(default="", mandatory=True),
+  "repository": attr.string(default=MAVEN_CENTRAL_HOST),
+  "server": attr.string(default=""),
+  "sha1": attr.string(default=""),
+  "sha256": attr.string(default=""),
+  "transitive": attr.bool(default=True),
 }
 
 # TODO(jingwen): figure out maven settings concatenation
@@ -159,9 +150,9 @@ _maven_jar_attrs = {
 # }
 
 maven_jar = repository_rule(
-    _maven_jar_impl,
-    attrs=_maven_jar_attrs,
-    local=False,
+  _maven_jar_impl,
+  attrs=_maven_jar_attrs,
+  local=False,
 )
 
 # maven_server = repository_rule(
