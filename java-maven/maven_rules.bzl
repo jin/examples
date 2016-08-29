@@ -67,27 +67,39 @@ def _create_artifact_struct(fully_qualified_name):
 # Creates a struct that contains all the paths
 # needed to store the jar in bazel cache
 def _create_path_struct(artifact):
+
   # e.g. guava-18.0.jar
   jar_filename = "%s-%s.jar" % (artifact.artifact_id, artifact.version)
+
   # e.g. com/google/guava/guava/18.0
   relative_folder = "/".join(artifact.group_id.split(".") +
-                                  [artifact.artifact_id] +
-                                  [artifact.version])
+                             [artifact.artifact_id] +
+                             [artifact.version])
 
   # The symlink to the actual .jar is stored in this folder, along
   # with the BUILD file
   symlink_folder = "jar"
+
   return struct(
     jar_filename = jar_filename,
     sha1_filename = "%s.sha1" % jar_filename,
     sha256_filename = "%s.sha256" % jar_filename,
     relative_folder = relative_folder,
     symlink_folder = symlink_folder,
+
     # e.g. com/google/guava/guava/18.0/guava-18.0.jar
     relative_jar = "%s/%s" % (relative_folder, jar_filename),
+
+    # e.g. jar/guava-18.0.jar
     symlink_jar = "%s/%s" % (symlink_folder, jar_filename),
   )
 
+
+# This is the main implementation of the maven_jar rule.
+# It does the following:
+# 1) generate file paths
+# 2) download the artifact with maven
+# 3) create symlinks in the cache folder
 def _maven_jar_impl(ctx):
   artifact = _create_artifact_struct(ctx.attr.artifact)
   paths = _create_path_struct(artifact)
