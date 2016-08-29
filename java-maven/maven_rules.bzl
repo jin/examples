@@ -19,6 +19,48 @@ MAVEN_CENTRAL_URL = HTTP_PROTOCOL + MAVEN_CENTRAL_HOST + MAVEN_CENTRAL_PATH
 
 MAVEN_DEP_PLUGIN = "org.apache.maven.plugins:maven-dependency-plugin:2.8:get"
 
+# Creates a struct that contains all the paths
+# needed to store the jar in bazel cache
+def _create_path_struct(ctx, artifact):
+  # e.g. guava-18.0.jar
+  jar_filename = "%s-%s.jar" % (artifact.artifact_id, artifact.version)
+  sha1_filename = "%s.sha1" % jar_filename
+
+  # e.g. com/google/guava/guava/18.0
+  jar_folder = "/".join(artifact.group_id.split(".") +
+                        [artifact.artifact_id] +
+                        [artifact.version])
+
+  # The symlink to the actual .jar is stored in this folder, along
+  # with the BUILD file
+  symlink_folder = "jar"
+
+  return struct(
+      jar_filename = jar_filename,
+      sha1_filename = sha1_filename,
+
+      # compute the exec_root absolute path for the folders
+      jar_folder = ctx.path(jar_folder),
+      symlink_folder = ctx.path(symlink_folder),
+
+      # e.g. {exec_root}/external/com_google_guava_guava/ \
+      #        com/google/guava/guava/18.0/guava-18.0.jar
+      absolute_jar_path = ctx.path("%s/%s" % (jar_folder, jar_filename)),
+      absolute_sha1_path = ctx.path("%s/%s" % (jar_folder, sha1_filename)),
+
+      # e.g. {exec_root}/external/com_google_guava_guava/jar/guava-18.0.jar
+      symlink_jar_path = ctx.path("%s/%s" % (symlink_folder, jar_filename)),
+  )
+
+def _create_folders(ctx, paths):
+  mkdir_status = ctx.execute([
+      "bash", "-c",
+      "set -ex",
+      "(mkdir -p %s %s)" % (paths.jar_folder, paths.symlink_folder)
+      ])
+  if mkdir_status.return_code != 0:
+    fail("Failed to create folders in execution root for %s\n" % ctx.name)
+
 # Returns a string containing the contents of the BUILD file
 def _create_build_file_contents(rule_name, jar_filename):
   return """
@@ -60,39 +102,6 @@ def _create_artifact_struct(ctx):
       group_id = group_id,
       artifact_id = artifact_id,
       version = version,
-  )
-
-# Creates a struct that contains all the paths
-# needed to store the jar in bazel cache
-def _create_path_struct(ctx, artifact):
-  # e.g. guava-18.0.jar
-  jar_filename = "%s-%s.jar" % (artifact.artifact_id, artifact.version)
-  sha1_filename = "%s.sha1" % jar_filename
-
-  # e.g. com/google/guava/guava/18.0
-  jar_folder = "/".join(artifact.group_id.split(".") +
-                        [artifact.artifact_id] +
-                        [artifact.version])
-
-  # The symlink to the actual .jar is stored in this folder, along
-  # with the BUILD file
-  symlink_folder = "jar"
-
-  return struct(
-      jar_filename = jar_filename,
-      sha1_filename = sha1_filename,
-
-      # compute the exec_root absolute path for the folders
-      jar_folder = ctx.path(jar_folder),
-      symlink_folder = ctx.path(symlink_folder),
-
-      # e.g. {exec_root}/external/com_google_guava_guava/ \
-      #        com/google/guava/guava/18.0/guava-18.0.jar
-      absolute_jar_path = ctx.path("%s/%s" % (jar_folder, jar_filename)),
-      absolute_sha1_path = ctx.path("%s/%s" % (jar_folder, sha1_filename)),
-
-      # e.g. {exec_root}/external/com_google_guava_guava/jar/guava-18.0.jar
-      symlink_jar_path = ctx.path("%s/%s" % (symlink_folder, jar_filename)),
   )
 
 def _download_artifact(ctx, fully_qualified_name, destination):
@@ -155,13 +164,10 @@ def maven_jar_impl(ctx):
   artifact = _create_artifact_struct(ctx)
   paths = _create_path_struct(ctx, artifact)
 
-  mkdir_status = ctx.execute([
-      "bash", "-c",
-      "set -ex",
-      "(mkdir -p %s %s)" % (paths.jar_folder, paths.symlink_folder)
-  ])
-  if mkdir_status.return_code != 0:
-    fail("Failed to create destination folder for %s\n" % artifact.fully_qualified_name)
+  _create_folders(
+      ctx = ctx,
+      paths = paths
+  )
 
   _generate_build_file(
       ctx = ctx,
