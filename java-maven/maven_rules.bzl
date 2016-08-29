@@ -13,15 +13,14 @@
 # limitations under the License.
 
 HTTP_PROTOCOL = "http://"
-MAVEN_CENTRAL_HOST = "repo1.maven.org"
+MAVEN_CENTRAL_HOST = "central.maven.org"
 MAVEN_CENTRAL_PATH = "/maven2"
 MAVEN_CENTRAL_URL = HTTP_PROTOCOL + MAVEN_CENTRAL_HOST + MAVEN_CENTRAL_PATH
 
 MAVEN_DEP_PLUGIN = "org.apache.maven.plugins:maven-dependency-plugin:2.8:get"
 
-# Creates a struct that contains all the paths
-# needed to store the jar in bazel cache
 def _create_path_struct(ctx, artifact):
+  """Creates a struct that contains all the paths needed to store the jar in bazel cache"""
   # e.g. guava-18.0.jar
   jar_filename = "%s-%s.jar" % (artifact.artifact_id, artifact.version)
   sha1_filename = "%s.sha1" % jar_filename
@@ -161,17 +160,18 @@ def _verify_checksum(ctx, paths, sha1 = ""):
 # 2) download the artifact with maven
 # 3) create symlinks in the cache folder
 def maven_jar_impl(ctx):
+  print(ctx.attr.server)
   artifact = _create_artifact_struct(ctx)
   paths = _create_path_struct(ctx, artifact)
 
   _create_folders(
       ctx = ctx,
-      paths = paths
+      paths = paths,
   )
 
   _generate_build_file(
       ctx = ctx,
-      paths = paths
+      paths = paths,
   )
 
   _download_artifact(
@@ -191,7 +191,7 @@ def maven_jar_impl(ctx):
 _maven_jar_attrs = {
     "artifact": attr.string(default="", mandatory=True),
     "repository": attr.string(default=MAVEN_CENTRAL_HOST),
-    "server": attr.string(default=""),
+    "server": attr.label(),
     "sha1": attr.string(default=""),
 }
 
