@@ -57,7 +57,7 @@ def _create_folders(ctx, paths):
       "bash", "-c",
       "set -ex",
       "(mkdir -p %s %s)" % (paths.jar_folder, paths.symlink_folder)
-      ])
+  ])
   if mkdir_status.return_code != 0:
     fail("Failed to create folders in execution root for %s\n" % ctx.name)
 
