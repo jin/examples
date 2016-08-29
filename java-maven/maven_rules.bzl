@@ -32,7 +32,7 @@ java_import(
 
 filegroup(
     name = 'file',
-    srcs = ['jar_filename'],
+    srcs = ['{jar_filename}'],
     visibility = ['//visibility:public']
 )\n""".format(rule_name = rule_name, jar_filename = jar_filename)
 
