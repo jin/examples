@@ -17,7 +17,7 @@ MAVEN_CENTRAL_HOST = "repo1.maven.org"
 MAVEN_CENTRAL_PATH = "/maven2"
 MAVEN_CENTRAL_URL = HTTP_PROTOCOL + MAVEN_CENTRAL_HOST + MAVEN_CENTRAL_PATH
 
-MAVEN_DEP_PLUGIN="org.apache.maven.plugins:maven-dependency-plugin:2.8:get"
+MAVEN_DEP_PLUGIN = "org.apache.maven.plugins:maven-dependency-plugin:2.8:get"
 
 # Returns a string containing the contents of the BUILD file
 def _create_build_file_contents(rule_name, jar_filename):
@@ -109,7 +109,8 @@ def _download_artifact(ctx, fully_qualified_name, destination):
   ]
   exec_result = ctx.execute(command)
   if exec_result.return_code != 0:
-    fail("Error downloading %s. Please check that your artifact ID is correct.\n%s" % (ctx.name, exec_result.stderr))
+    fail("Error downloading %s. Please check that your artifact ID " +
+         "or repository is correct.\n%s" % (ctx.name, exec_result.stderr))
 
 def _compute_shasum(ctx, jar_path):
   shasum_status = ctx.execute(["bash", "-c", """
