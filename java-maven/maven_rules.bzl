@@ -36,6 +36,10 @@ filegroup(
     visibility = ['//visibility:public']
 )\n""".format(rule_name = rule_name, jar_filename = jar_filename)
 
+def _generate_build_file(ctx, paths):
+  build_file_contents = _create_build_file_contents(ctx.name, paths.jar_filename)
+  ctx.file('%s/BUILD' % paths.symlink_folder, build_file_contents, False)
+
 def _validate_ctx_attr(ctx):
   if (ctx.attr.repository != "" and ctx.attr.server != ""):
     fail("%s specifies both 'repository' and 'server', " +
@@ -159,8 +163,10 @@ def maven_jar_impl(ctx):
   if mkdir_status.return_code != 0:
     fail("Failed to create destination folder for %s\n" % artifact.fully_qualified_name)
 
-  build_file_contents = _create_build_file_contents(ctx.name, paths.jar_filename)
-  ctx.file('%s/BUILD' % paths.symlink_folder, build_file_contents, False)
+  _generate_build_file(
+      ctx = ctx,
+      paths = paths
+  )
 
   _download_artifact(
       ctx = ctx,
