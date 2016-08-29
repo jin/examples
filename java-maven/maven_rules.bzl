@@ -51,56 +51,46 @@ def _create_artifact_struct(fully_qualified_name):
 
   group_id, artifact_id, version = parts
   return struct(
-    fully_qualified_name = fully_qualified_name,
-    group_id = group_id,
-    artifact_id = artifact_id,
-    version = version,
+      fully_qualified_name = fully_qualified_name,
+      group_id = group_id,
+      artifact_id = artifact_id,
+      version = version,
   )
 
 # Creates a struct that contains all the paths
 # needed to store the jar in bazel cache
-def _create_path_struct(artifact):
-
+def _create_path_struct(ctx, artifact):
   # e.g. guava-18.0.jar
   jar_filename = "%s-%s.jar" % (artifact.artifact_id, artifact.version)
 
   # e.g. com/google/guava/guava/18.0
-  relative_folder = "/".join(artifact.group_id.split(".") +
-                             [artifact.artifact_id] +
-                             [artifact.version])
+  jar_folder = "/".join(artifact.group_id.split(".") +
+                        [artifact.artifact_id] +
+                        [artifact.version])
 
   # The symlink to the actual .jar is stored in this folder, along
   # with the BUILD file
   symlink_folder = "jar"
 
   return struct(
-    jar_filename = jar_filename,
-    sha1_filename = "%s.sha1" % jar_filename,
-    sha256_filename = "%s.sha256" % jar_filename,
-    relative_folder = relative_folder,
-    symlink_folder = symlink_folder,
+      jar_filename = jar_filename,
+      sha1_filename = "%s.sha1" % jar_filename,
+      sha256_filename = "%s.sha256" % jar_filename,
 
-    # e.g. com/google/guava/guava/18.0/guava-18.0.jar
-    relative_jar = "%s/%s" % (relative_folder, jar_filename),
+      # compute the exec_root absolute path for the folders
+      jar_folder = ctx.path(jar_folder),
+      symlink_folder = ctx.path(symlink_folder),
 
-    # e.g. jar/guava-18.0.jar
-    symlink_jar = "%s/%s" % (symlink_folder, jar_filename),
+      # e.g. {exec_root}/external/com_google_guava_guava/ \
+      #        com/google/guava/guava/18.0/guava-18.0.jar
+      absolute_jar_path = ctx.path("%s/%s" % (jar_folder, jar_filename)),
+
+      # e.g. {exec_root}/external/com_google_guava_guava/jar/guava-18.0.jar
+      symlink_jar_path = ctx.path("%s/%s" % (symlink_folder, jar_filename)),
   )
 
-
-# This is the main implementation of the maven_jar rule.
-# It does the following:
-# 1) generate file paths
-# 2) download the artifact with maven
-# 3) create symlinks in the cache folder
-def _maven_jar_impl(ctx):
-  artifact = _create_artifact_struct(ctx.attr.artifact)
-  paths = _create_path_struct(artifact)
-
-  mkdir_status = ctx.execute(["mkdir", "-p", paths.relative_folder, paths.symlink_folder])
-  if mkdir_status.return_code != 0:
-    fail("Failed to create destination folder for %s" % artifact.fully_qualified_name)
-
+def _download_artifact(ctx, fully_qualified_name, dest):
+  transitive = str(ctx.attr.transitive).lower()
   command = [
     "bash", "-c", """
       set -ex
@@ -110,37 +100,53 @@ def _maven_jar_impl(ctx):
       "-Dtransitive={transitive}" \
       "-Ddest={dest}" \
     """.format(
-    flags = "-e -X",
-    dep_get_plugin = MAVEN_DEP_PLUGIN,
-    repository = ctx.attr.repository,
-    artifact = artifact.fully_qualified_name,
-    transitive = str(ctx.attr.transitive).lower(),
-    dest = ctx.path(paths.relative_jar),
+      flags = "-e -X",
+      dep_get_plugin = MAVEN_DEP_PLUGIN,
+      repository = ctx.attr.repository,
+      artifact = fully_qualified_name,
+      transitive = transitive,
+      dest = dest,
     )
   ]
-
-  build_file_contents = _create_build_file_contents(ctx.name, paths.jar_filename)
-  ctx.file('%s/BUILD' % paths.symlink_folder, build_file_contents, False)
-
   exec_result = ctx.execute(command)
   if exec_result.return_code != 0:
     fail("error downloading %s:\n%s" % (ctx.name, exec_result.stderr))
 
-  ctx.symlink(paths.relative_jar, paths.symlink_jar)
+# This is the main implementation of the maven_jar rule.
+# It does the following:
+# 1) generate file paths
+# 2) download the artifact with maven
+# 3) create symlinks in the cache folder
+def maven_jar_impl(ctx):
+  artifact = _create_artifact_struct(ctx.attr.artifact)
+  paths = _create_path_struct(ctx, artifact)
 
-  # print(exec_result.stdout)
+  mkdir_status = ctx.execute(["mkdir", "-p", paths.jar_folder, paths.symlink_folder])
+  if mkdir_status.return_code != 0:
+    fail("Failed to create destination folder for %s" % artifact.fully_qualified_name)
+
+  build_file_contents = _create_build_file_contents(ctx.name, paths.jar_filename)
+  ctx.file('%s/BUILD' % paths.symlink_folder, build_file_contents, False)
+
+  _download_artifact(
+      ctx = ctx,
+      fully_qualified_name = artifact.fully_qualified_name,
+      dest = paths.absolute_jar_path
+  )
+
+  ctx.symlink(paths.absolute_jar_path, paths.symlink_jar_path)
 
 # TODO(jingwen)
 # def _maven_server_impl(repo_ctx):
 #   print('TODO')
 
 _maven_jar_attrs = {
-  "artifact": attr.string(default="", mandatory=True),
-  "repository": attr.string(default=MAVEN_CENTRAL_HOST),
-  "server": attr.string(default=""),
-  "sha1": attr.string(default=""),
-  "sha256": attr.string(default=""),
-  "transitive": attr.bool(default=True),
+    "artifact": attr.string(default="", mandatory=True),
+    "repository": attr.string(default=MAVEN_CENTRAL_HOST),
+    "server": attr.string(default=""),
+    "sha1": attr.string(default=""),
+    "sha256": attr.string(default=""),
+    "transitive": attr.bool(default=True),
 }
 
 # TODO(jingwen): figure out maven settings concatenation
@@ -150,9 +156,9 @@ _maven_jar_attrs = {
 # }
 
 maven_jar = repository_rule(
-  _maven_jar_impl,
-  attrs=_maven_jar_attrs,
-  local=False,
+    maven_jar_impl,
+    attrs=_maven_jar_attrs,
+    local=False,
 )
 
 # maven_server = repository_rule(
