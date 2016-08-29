@@ -12,23 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def _construct_url(protocol, host, path):
-  return protocol + host + path
-
 HTTP_PROTOCOL = "http://"
 MAVEN_CENTRAL_HOST = "repo1.maven.org"
 MAVEN_CENTRAL_PATH = "/maven2"
-MAVEN_CENTRAL_URL = _construct_url(HTTP_PROTOCOL, MAVEN_CENTRAL_HOST, MAVEN_CENTRAL_PATH)
+MAVEN_CENTRAL_URL = HTTP_PROTOCOL + MAVEN_CENTRAL_HOST + MAVEN_CENTRAL_PATH
 
-MAVEN_GLOBAL_SETTINGS_PATH = "$M2_HOME/conf/settings.xml"
-MAVEN_USER_SETTINGS_PATH = "$HOME/.m2/settings.xml"
-
+# TODO(jingwen): remove dependency from maven binary
 MAVEN_DEP_PLUGIN="org.apache.maven.plugins:maven-dependency-plugin:2.8:get"
 
-def _create_build_file(ctx):
-  artifact = _deconstruct_artifact_name(ctx.attr.artifact)
+# MAVEN_GLOBAL_SETTINGS_PATH = "$M2_HOME/conf/settings.xml"
+# MAVEN_USER_SETTINGS_PATH = "$HOME/.m2/settings.xml"
+
+# Returns a string containing the contents of the BUILD file
+def _create_build_file_contents(rule_name, artifact):
   return """
-# DO NOT EDIT: automatically generated BUILD file for maven_jar rule {name}
+# DO NOT EDIT: automatically generated BUILD file for maven_jar rule {rule_name}
 
 java_import(
     name = 'jar',
@@ -40,56 +38,93 @@ filegroup(
     name = 'file',
     srcs = ['{artifact_id}-{version}.jar'],
     visibility = ['//visibility:public']
-)
-    """.format(
-      name = ctx.name,
+)\n""".format(
+      rule_name = rule_name,
       artifact_id = artifact.artifact_id,
       version = artifact.version,
     )
 
-def _check_server_and_repo(ctx):
+def _validate_ctx_attr(ctx):
   if (ctx.attr.repository != "" and ctx.attr.server != ""):
     fail("%s specifies both 'repository' and 'server', " +
          "which are mutually exclusive options." % ctx.name)
 
-def _deconstruct_artifact_name(artifact):
-  parts = artifact.split(":")
+# Creates a struct containing the different parts
+# of an artifact's fully qualified name
+def _create_artifact_struct(fully_qualified_name):
+  parts = fully_qualified_name.split(":")
   if len(parts) != 3:
     fail("artifact must be defined as a fully qualified name. e.g. groupId:artifactId:version")
+
   group_id, artifact_id, version = parts
   return struct(
-    fully_qualified_name = artifact,
+    fully_qualified_name = fully_qualified_name,
     group_id = group_id,
     artifact_id = artifact_id,
     version = version,
   )
 
-def _maven_jar_impl(ctx):
-  command = [
-      "bash", "-c", """
-      set -ex
-      mvn {flags} {dep_get_plugin} \
-      "-DrepoUrl={repository}" \
-      "-Dartifact={artifact}" \
-      "-Dtransitive={transitive}" \
-      "-Ddest={dest}" \
-      """.format(
-            flags = "-e -X",
-            dep_get_plugin = MAVEN_DEP_PLUGIN,
-            repository = ctx.attr.repository,
-            artifact = ctx.attr.artifact,
-            transitive = str(ctx.attr.transitive).lower(),
-            dest = ctx.path("./jar"),
-          )
-      ]
-  print("".join(command))
-  print(_create_build_file(ctx))
+# Creates a struct that contains all the paths
+# needed to store the jar in bazel cache
+def _create_path_struct(artifact):
+  # e.g. guava-18.0.jar
+  jar_filename = "%s-%s.jar" % (artifact.artifact_id, artifact.version)
+  # e.g. com/google/guava/guava/18.0
+  relative_folder_name = "/".join(artifact.group_id.split(".") +
+                                  [artifact.artifact_id] +
+                                  [artifact.version])
+  # The symlink to the actual .jar is stored in this folder, along
+  # with the BUILD file
+  symlink_folder_name = "jar"
+  return struct(
+    jar_filename = jar_filename,
+    sha1_filename = "%s.sha1" % jar_filename,
+    sha256_filename = "%s.sha256" % jar_filename,
+    relative_folder_name = relative_folder_name,
+    symlink_folder_name = symlink_folder_name,
+    # e.g. com/google/guava/guava/18.0/guava-18.0.jar
+    relative_jar_path = "%s/%s" % (relative_folder_name, jar_filename),
+    symlink_jar_path = "%s/%s" % (symlink_folder_name, jar_filename),
+  )
 
-  # exec_result = ctx.execute(command)
-  # if exec_result.return_code != 0:
-  #   fail("error downloading %s:\n%s" % (ctx.name, exec_result.stderr))
-  # else:
-  #   print(exec_result.stdout)
+def _maven_jar_impl(ctx):
+  artifact = _create_artifact_struct(ctx.attr.artifact)
+  paths = _create_path_struct(artifact)
+
+  mkdir_status = ctx.execute(["mkdir", "-p", paths.relative_folder_name, paths.symlink_folder_name])
+  if mkdir_status.return_code != 0:
+    fail("Failed to create destination folder for %s" % artifact.fully_qualified_name)
+
+  command = [
+    "bash", "-c", """
+    set -ex
+    mvn {flags} {dep_get_plugin} \
+    "-DrepoUrl={repository}" \
+    "-Dartifact={artifact}" \
+    "-Dtransitive={transitive}" \
+    "-Ddest={dest}" \
+    """.format(
+          flags = "-e -X",
+          dep_get_plugin = MAVEN_DEP_PLUGIN,
+          repository = ctx.attr.repository,
+          artifact = artifact.fully_qualified_name,
+          transitive = str(ctx.attr.transitive).lower(),
+          dest = ctx.path(paths.relative_jar_path),
+       )
+    ]
+
+  # print("".join(command))
+  # print(_create_build_file_contents(ctx.name, artifact))
+  # print(relative_folder_name)
+  ctx.file('%s/BUILD' % paths.symlink_folder_name, _create_build_file_contents(ctx.name, artifact), False)
+
+  exec_result = ctx.execute(command)
+  if exec_result.return_code != 0:
+    fail("error downloading %s:\n%s" % (ctx.name, exec_result.stderr))
+
+  ctx.symlink(paths.relative_jar_path, paths.symlink_jar_path)
+
+  # print(exec_result.stdout)
 
 # TODO(jingwen)
 # def _maven_server_impl(repo_ctx):
