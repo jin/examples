@@ -3,14 +3,13 @@ load(":maven_rules.bzl", "maven_jar", "maven_server")
 
 maven_server(
     name = "maven_uk_server",
-    url = "http://repo.exist.com/maven2",
-    settings_file = "./abc",
+    url = "http://uk.maven.org/maven2",
 )
 
 maven_jar(
     name = "com_google_guava_guava",
     artifact = "com.google.guava:guava:18.0",
     sha1 = "cce0823396aa693798f8882e64213b1772032b09",
-    # repository = "http://repo.exist.com/maven2",
+    # repository = "http://repo1.maven.org/maven2",
     server = "maven_uk_server",
 )
