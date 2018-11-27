@@ -1,0 +1,17 @@
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+
+android_sdk_repository(name = "androidsdk")
+
+android_ndk_repository(name = "androidndk")
+
+git_repository(
+    name = "gtest",
+    commit = "2fe3bd994b3189899d93f1d5a881e725e046fdc2",
+    remote = "https://github.com/abseil/googletest.git",
+)
+
+git_repository(
+    name = "abseil_cpp",
+    commit = "3088e76c597e068479e82508b1770a7ad0c806b6",
+    remote = "https://github.com/abseil/abseil-cpp.git",
+)
