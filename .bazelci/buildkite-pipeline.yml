@@ -2,6 +2,7 @@
 platforms:
   ubuntu1404:
     shell_commands:
+    - "touch WORKSPACE"
     - "cd cpp-tutorial/stage1"
     build_targets:
     - "..."
