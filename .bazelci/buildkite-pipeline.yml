@@ -1,0 +1,7 @@
+---
+platforms:
+  ubuntu1404:
+    shell_commands:
+    - "cd cpp-tutorial/stage1"
+    build_targets:
+    - "..."
